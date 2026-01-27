@@ -102,7 +102,8 @@ int get_rank ()
     ret = uname (&utsname_buf);
     check (ret == 0, "Failed to call uname");
 
-    strncpy (hostname, utsname_buf.nodename, sizeof(hostname));
+    strncpy (hostname, utsname_buf.nodename, sizeof(hostname)-1);
+    hostname[sizeof(hostname) - 1] = '\0';
 
     config_info.rank = -1;
     for (i = 0; i < num_servers; i++) {
