@@ -8,6 +8,8 @@
 
 struct ConfigInfo config_info;
 
+// 打印配置信息
+// 注：这些配置参数对IB和RoCE都适用，通过libibverbs库进行抽象
 void print_config_info ()
 {
     log (LOG_SUB_HEADER, "Configuraion");
