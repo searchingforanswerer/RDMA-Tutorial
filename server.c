@@ -11,6 +11,8 @@
 #include "config.h"
 #include "server.h"
 
+#define PROGRESS_INTERVAL 100000  // 每10000条消息输出一次进度
+
 // ============= 服务器工作线程 =============
 void *server_thread (void *arg)
 {
@@ -55,7 +57,7 @@ void *server_thread (void *arg)
         ret = post_recv (msg_size, lkey, (uint64_t)buf_ptr, qp, buf_ptr);
         check (ret == 0, "thread[%ld]: failed to post recv", thread_id);
         buf_offset = (buf_offset + msg_size) % buf_size;
-        buf_ptr += buf_offset;
+        buf_ptr = ib_res.ib_buf + buf_offset;
     }
 
     /* ========== 发送启动信号给Client ========== */
@@ -67,8 +69,8 @@ void *server_thread (void *arg)
     // Server不断接收Client的消息，并立即回显
     while (stop != true) {
         /* 轮询完成队列 */
-	n = ibv_poll_cq (cq, num_wc, wc);
-	if (n < 0) {
+        n = ibv_poll_cq (cq, num_wc, wc);
+        if (n < 0) {
             check (0, "thread[%ld]: Failed to poll cq", thread_id);
         }
 
@@ -80,36 +82,44 @@ void *server_thread (void *arg)
                     check (0, "thread[%ld]: send failed status: %s",
                            thread_id, ibv_wc_status_str(wc[i].status));
                 } else {
-		    check (0, "thread[%ld]: recv failed status: %s",
+		            check (0, "thread[%ld]: recv failed status: %s",
                            thread_id, ibv_wc_status_str(wc[i].status));
-		}
+		        }
             }
 
             /* ========== 处理接收完成事件 ========== */
             if (wc[i].opcode == IBV_WC_RECV) {
-                ops_count += 1;  // 统计接收操作数
-		debug ("ops_count = %ld", ops_count);
-
-		/* 跳过预热操作，开始计时 */
-		if (ops_count == NUM_WARMING_UP_OPS) {
-                    gettimeofday (&start, NULL);
-                }
+                ops_count += 1;
 		
-		/* 检查是否达到测试总数 */
-		if (ops_count == TOT_NUM_OPS) {
-		    gettimeofday (&end, NULL);  // 记录结束时间
-		    stop = true;
-		    break;
-		}
+                /* 定期输出进度信息 */
+                if (ops_count % PROGRESS_INTERVAL == 0) {
+                    log ("thread[%ld]: progress - %ld messages processed", 
+                        thread_id, ops_count);
+                }
 
-		/* ========== 回显消息：将接收的消息发送回Client ========== */
+                /* 跳过预热操作，开始计时 */
+                if (ops_count == NUM_WARMING_UP_OPS) {
+                        gettimeofday (&start, NULL);
+                    log ("thread[%ld]: warmup completed, timing started", thread_id);
+                }
+                
+                /* 检查是否达到测试总数 */
+                if (ops_count == TOT_NUM_OPS) {
+                    gettimeofday (&end, NULL);
+                    log ("thread[%ld]: all messages processed (%ld total)", 
+                        thread_id, ops_count);
+                    stop = true;
+                    break;
+                }
+
+                /* ========== 回显消息：将接收的消息发送回Client ========== */
                 char *msg_ptr = (char *)wc[i].wr_id;  // 获取接收缓冲区地址
-		post_send (msg_size, lkey, 0, MSG_REGULAR, qp, msg_ptr);
+                post_send (msg_size, lkey, 0, MSG_REGULAR, qp, msg_ptr);
 
-		/* 预先提交新的接收请求，准备接收下一条消息 */
+                /* 预先提交新的接收请求，准备接收下一条消息 */
                 post_recv (msg_size, lkey, wc[i].wr_id, qp, msg_ptr);
+            }
 	    }
-	}
     }
 
     /* ========== 第二阶段：发送停止信号给Client ========== */

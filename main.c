@@ -36,8 +36,8 @@ int main (int argc, char *argv[])
     }    
 
     /* ========== 设置RDMA通信参数 ========== */
-    config_info.msg_size         = 64;   // 每条消息64字节
-    config_info.num_concurr_msgs = 1;    // 允许1条并发消息
+    config_info.msg_size         = 1024;   // 每条消息64字节
+    config_info.num_concurr_msgs = 64;    // 允许1条并发消息
 
     /* ========== 初始化环境（日志等） ========== */
     ret = init_env ();

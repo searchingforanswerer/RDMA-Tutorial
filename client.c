@@ -56,9 +56,9 @@ void *client_thread_func (void *arg)
     for (i = 0; i < num_concurr_msgs; i++) {
 	ret = post_recv (msg_size, lkey, (uint64_t)buf_ptr, qp, buf_ptr);
 	check (ret == 0, "thread[%ld]: failed to post recv", thread_id);
-	// 循环使用缓冲区
-	buf_offset = (buf_offset + msg_size) % buf_size;
-	buf_ptr += buf_offset;
+        // 循环使用缓冲区
+        buf_offset = (buf_offset + msg_size) % buf_size;
+        buf_ptr = ib_res.ib_buf + buf_offset;
     }
 
     /* ========== 等待Server的启动信号 ========== */
@@ -78,17 +78,17 @@ void *client_thread_func (void *arg)
                        thread_id, ibv_wc_status_str(wc[i].status));
             }
 	    
-	    // 只处理接收操作
-	    if (wc[i].opcode == IBV_WC_RECV) {
-		/* 接收完成，提交新的接收请求 */
-		post_recv (msg_size, lkey, (uint64_t)buf_ptr, qp, buf_ptr);
-		buf_offset = (buf_offset + msg_size) % buf_size;
-		buf_ptr += buf_offset;
+            // 只处理接收操作
+            if (wc[i].opcode == IBV_WC_RECV) {
+                /* 接收完成，提交新的接收请求 */
+                post_recv (msg_size, lkey, (uint64_t)buf_ptr, qp, buf_ptr);
+                buf_offset = (buf_offset + msg_size) % buf_size;
+                buf_ptr = ib_res.ib_buf + buf_offset;
 
                 /* 检查立即数是否为启动信号 */
                 if (ntohl(wc[i].imm_data) == MSG_CTL_START) {
-		    start_sending = true;
-		    break;
+                    start_sending = true;
+                    break;
                 }
             }
         }
@@ -99,11 +99,12 @@ void *client_thread_func (void *arg)
     // 初始化缓冲区指针
     buf_ptr = ib_res.ib_buf;
     // 预先提交num_concurr_msgs个发送请求
+    buf_offset = 0;
     for (i = 0; i < num_concurr_msgs; i++) {
-	ret = post_send (msg_size, lkey, 0, MSG_REGULAR, qp, buf_ptr);
-	check (ret == 0, "thread[%ld]: failed to post send", thread_id);
-	buf_offset = (buf_offset + msg_size) % buf_size;
-	buf_ptr += buf_offset;
+        ret = post_send (msg_size, lkey, 0, MSG_REGULAR, qp, buf_ptr);
+        check (ret == 0, "thread[%ld]: failed to post send", thread_id);
+        buf_offset = (buf_offset + msg_size) % buf_size;
+        buf_ptr = ib_res.ib_buf + buf_offset;
     }
     
     /* ========== 主通信循环 ========== */
@@ -129,31 +130,31 @@ void *client_thread_func (void *arg)
 
             /* ========== 处理接收完成事件 ========== */
             if (wc[i].opcode == IBV_WC_RECV) {
-		ops_count += 1;  // 统计接收操作数
-		debug ("ops_count = %ld", ops_count);
+                ops_count += 1;  // 统计接收操作数
+                debug ("ops_count = %ld", ops_count);
 
-		/* 跳过预热操作，开始计时 */
-		if (ops_count == NUM_WARMING_UP_OPS) {
-		    gettimeofday (&start, NULL);
-		}
+                /* 跳过预热操作，开始计时 */
+                if (ops_count == NUM_WARMING_UP_OPS) {
+                    gettimeofday (&start, NULL);
+                }
 
-		/* 检查是否收到停止信号 */
-		if (ntohl(wc[i].imm_data) == MSG_CTL_STOP) {
-		    gettimeofday (&end, NULL);  // 记录结束时间
-		    stop = true;
-		    break;
-		}
-		
-		/* 将接收到的消息回显给Server */
-		char *msg_ptr = (char *)wc[i].wr_id;  // 获取接收缓冲区地址
-		post_send (msg_size, lkey, 0, MSG_REGULAR, qp, msg_ptr);
+                /* 检查是否收到停止信号 */
+                if (ntohl(wc[i].imm_data) == MSG_CTL_STOP) {
+                    gettimeofday (&end, NULL);  // 记录结束时间
+                    stop = true;
+                    break;
+                }
+                
+                /* 将接收到的消息回显给Server */
+                char *msg_ptr = (char *)wc[i].wr_id;  // 获取接收缓冲区地址
+                post_send (msg_size, lkey, 0, MSG_REGULAR, qp, msg_ptr);
 
                 /* 预先提交新的接收请求 */
                 post_recv (msg_size, lkey, (uint64_t)buf_ptr, qp, buf_ptr);
-		buf_offset = (buf_offset + msg_size) % buf_size;
-		buf_ptr += buf_offset;
-	    }
-	} /* 完成所有工作完成项的处理 */
+                buf_offset = (buf_offset + msg_size) % buf_size;
+                buf_ptr = ib_res.ib_buf + buf_offset;
+	        }
+	    } /* 完成所有工作完成项的处理 */
     }
 
     /* ========== 统计和输出吞吐量 ========== */
