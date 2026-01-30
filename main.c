@@ -20,19 +20,19 @@ int main (int argc, char *argv[])
     /* ========== 参数解析：区分Server和Client ========== */
     // 根据命令行参数数量判断运行角色
     if (argc == 3) {
-	// 3个参数：./prog server_name sock_port -> Client模式
-	config_info.is_server   = false;
-	config_info.server_name = argv[1];  // Server的主机名或IP
-	config_info.sock_port   = argv[2];  // 连接端口
+        // 3个参数：./prog server_name sock_port -> Client模式
+        config_info.is_server   = false;
+        config_info.server_name = argv[1];  // Server的主机名或IP
+        config_info.sock_port   = argv[2];  // 连接端口
     } else if (argc == 2) {
-	// 2个参数：./prog sock_port -> Server模式
-	config_info.is_server = true;
-	config_info.sock_port = argv[1];    // 监听端口
+        // 2个参数：./prog sock_port -> Server模式
+        config_info.is_server = true;
+        config_info.sock_port = argv[1];    // 监听端口
     } else {
-	// 参数错误，打印用法
-	printf ("Server: %s sock_port\n", argv[0]);
-	printf ("Client: %s server_name sock_port\n", argv[0]);
-	return 0;
+        // 参数错误，打印用法
+        printf ("Server: %s sock_port\n", argv[0]);
+        printf ("Client: %s server_name sock_port\n", argv[0]);
+        return 0;
     }    
 
     /* ========== 设置RDMA通信参数 ========== */
@@ -72,9 +72,9 @@ int init_env ()
     /* ========== 创建日志文件 ========== */
     // Server和Client分别创建各自的日志文件
     if (config_info.is_server) {
-	log_fp = fopen ("server.log", "w");
+	    log_fp = fopen ("server.log", "w");
     } else {
-	log_fp = fopen ("client.log", "w");
+	    log_fp = fopen ("client.log", "w");
     }
     check (log_fp != NULL, "Failed to open log file");
 

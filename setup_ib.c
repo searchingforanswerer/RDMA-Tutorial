@@ -27,13 +27,19 @@ int connect_qp_server ()
     listen(sockfd, 5);
 
     // 2. 等待client连接
-    peer_sockfd = accept(sockfd, (struct sockaddr *)&peer_addr,
-			 &peer_addr_len);
+    peer_sockfd = accept(sockfd, (struct sockaddr *)&peer_addr, &peer_addr_len);
     check (peer_sockfd > 0, "Failed to create peer_sockfd");
 
     // 3. 初始化本地QP信息（LID: Local ID，qp_num: 队列对号）
     local_qp_info.lid	 = ib_res.port_attr.lid; 
     local_qp_info.qp_num = ib_res.qp->qp_num;
+
+    // 添加：查询本地GID
+    union ibv_gid tmp_gid;
+    ret = ibv_query_gid(ib_res.ctx, IB_PORT, 3, &tmp_gid);
+    check(ret == 0, "Failed to query local GID");
+    memcpy(&local_qp_info.gid, &tmp_gid, sizeof(tmp_gid));
+    local_qp_info.gid_index = 3;// 使用GID索引3
     
     // 4. 从client接收其QP信息
     ret = sock_get_qp_info (peer_sockfd, &remote_qp_info);
@@ -44,8 +50,13 @@ int connect_qp_server ()
     check (ret == 0, "Failed to send qp_info to client");
 
     // 6. 修改本地QP状态为RTS（Ready To Send），使用remote QP信息
-    ret = modify_qp_to_rts (ib_res.qp, remote_qp_info.qp_num, 
-			    remote_qp_info.lid);
+    union ibv_gid remote_gid;
+    memcpy(&remote_gid, &remote_qp_info.gid, sizeof(remote_gid));
+    ret = modify_qp_to_rts (ib_res.qp, 
+                            remote_qp_info.qp_num, 
+			                remote_qp_info.lid,
+                            &remote_gid,
+                            remote_qp_info.gid_index);
     check (ret == 0, "Failed to modify qp to rts");
 
     // 7. 输出QP连接信息
@@ -70,10 +81,10 @@ int connect_qp_server ()
 
  error:
     if (peer_sockfd > 0) {
-	close (peer_sockfd);
+	    close (peer_sockfd);
     }
     if (sockfd > 0) {
-	close (sockfd);
+	    close (sockfd);
     }
     
     return -1;
@@ -90,12 +101,19 @@ int connect_qp_client ()
 
     // 1. 创建socket并连接到server
     peer_sockfd = sock_create_connect (config_info.server_name,
-				       config_info.sock_port);
+				                       config_info.sock_port);
     check (peer_sockfd > 0, "Failed to create peer_sockfd");
 
     // 2. 初始化本地QP信息
     local_qp_info.lid     = ib_res.port_attr.lid; 
     local_qp_info.qp_num  = ib_res.qp->qp_num; 
+
+    // 添加：查询本地GID
+    union ibv_gid tmp_gid;
+    ret = ibv_query_gid(ib_res.ctx, IB_PORT, 3, &tmp_gid);
+    check(ret == 0, "Failed to query local GID");
+    memcpy(&local_qp_info.gid, &tmp_gid, sizeof(tmp_gid));
+    local_qp_info.gid_index = 3;  // 使用 GID 索引 3
    
     // 3. 将本地QP信息发送给server    
     ret = sock_set_qp_info (peer_sockfd, &local_qp_info);
@@ -106,8 +124,13 @@ int connect_qp_client ()
     check (ret == 0, "Failed to get qp_info from server");
 
     // 5. 修改本地QP状态为RTS，使用server QP信息
-    ret = modify_qp_to_rts (ib_res.qp, remote_qp_info.qp_num, 
-			    remote_qp_info.lid);
+    union ibv_gid remote_gid;
+    memcpy(&remote_gid, &remote_qp_info.gid, sizeof(remote_gid));
+    ret = modify_qp_to_rts (ib_res.qp, 
+                            remote_qp_info.qp_num, 
+			                remote_qp_info.lid,
+                            &remote_gid,
+                            remote_qp_info.gid_index);
     check (ret == 0, "Failed to modify qp to rts");
 
     // 6. 输出QP连接信息
@@ -175,9 +198,13 @@ int setup_ib ()
     // 6. 查询IB设备属性（最大CQE、最大WR等）
     ret = ibv_query_device(ib_res.ctx, &ib_res.dev_attr);
     check(ret==0, "Failed to query device");
+
+    //printf("max_qp_wr=%u max_cqe=%u\n",
+       //ib_res.dev_attr.max_qp_wr, ib_res.dev_attr.max_cqe);
     
     // 7. 创建完成队列（Completion Queue）
-    ib_res.cq = ibv_create_cq (ib_res.ctx, ib_res.dev_attr.max_cqe, 
+    int cq_size = 4096;
+    ib_res.cq = ibv_create_cq (ib_res.ctx, cq_size, 
 			       NULL, NULL, 0);
     check (ib_res.cq != NULL, "Failed to create cq");
     
@@ -186,8 +213,8 @@ int setup_ib ()
         .send_cq = ib_res.cq,
         .recv_cq = ib_res.cq, // 发送接收共用一个cq
         .cap = {
-            .max_send_wr = ib_res.dev_attr.max_qp_wr,      // 最大发送WR数
-            .max_recv_wr = ib_res.dev_attr.max_qp_wr,      // 最大接收WR数
+            .max_send_wr = 1024,      // 最大发送WR数
+            .max_recv_wr = 1024,      // 最大接收WR数
             .max_send_sge = 1,                              // 最大发送SGE数
             .max_recv_sge = 1,                              // 最大接收SGE数
         },

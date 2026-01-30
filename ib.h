@@ -26,8 +26,10 @@ static inline uint64_t ntohll (uint64_t x) {return x; }
 #endif
 
 struct QPInfo {
-    uint16_t lid;
+    uint16_t lid;// RoCE中为0；
     uint32_t qp_num;
+    union ibv_gid gid;// GID
+    uint8_t gid_index;// GID索引
 }__attribute__ ((packed));
 
 enum MsgType {
@@ -36,7 +38,8 @@ enum MsgType {
     MSG_REGULAR,
 };
 
-int modify_qp_to_rts (struct ibv_qp *qp, uint32_t qp_num, uint16_t lid);
+int modify_qp_to_rts (struct ibv_qp *qp, uint32_t qp_num, uint16_t target_lid,
+                            union ibv_gid *target_gid, uint8_t target_gid_index);
 
 int post_send (uint32_t req_size, uint32_t lkey, uint64_t wr_id, 
 	       uint32_t imm_data, struct ibv_qp *qp, char *buf);

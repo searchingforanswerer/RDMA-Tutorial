@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <sys/time.h>
+#include <pthread.h>
+#include <sched.h>
 
 #include "debug.h"
 #include "ib.h"

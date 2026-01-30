@@ -5,68 +5,78 @@
 #include "debug.h"
 
 // ============= 将QP状态从RESET转换为RTS（Ready To Send） =============
-int modify_qp_to_rts (struct ibv_qp *qp, uint32_t target_qp_num, uint16_t target_lid)
+int modify_qp_to_rts (struct ibv_qp *qp, uint32_t target_qp_num, uint16_t target_lid,
+						union ibv_gid *target_gid, uint8_t target_gid_index)
 {
     int ret = 0;
 
     /* 第一步：将QP状态转换为INIT */
     {
-	struct ibv_qp_attr qp_attr = {
-	    .qp_state        = IBV_QPS_INIT,
-	    .pkey_index      = 0,
-	    .port_num        = IB_PORT,
-	    .qp_access_flags = IBV_ACCESS_LOCAL_WRITE |    // 本地写访问
-	                       IBV_ACCESS_REMOTE_READ |     // 远程读访问
-	                       IBV_ACCESS_REMOTE_ATOMIC |   // 远程原子操作
-	                       IBV_ACCESS_REMOTE_WRITE,     // 远程写访问
-	};
+		struct ibv_qp_attr qp_attr = {
+			.qp_state        = IBV_QPS_INIT,
+			.pkey_index      = 0,
+			.port_num        = IB_PORT,
+			.qp_access_flags = IBV_ACCESS_LOCAL_WRITE |    // 本地写访问
+							IBV_ACCESS_REMOTE_READ |     // 远程读访问
+							IBV_ACCESS_REMOTE_ATOMIC |   // 远程原子操作
+							IBV_ACCESS_REMOTE_WRITE,     // 远程写访问
+		};
 
-	ret = ibv_modify_qp (qp, &qp_attr,
-			 IBV_QP_STATE | IBV_QP_PKEY_INDEX |
-			 IBV_QP_PORT  | IBV_QP_ACCESS_FLAGS);
-	check (ret == 0, "Failed to modify qp to INIT.");
+		ret = ibv_modify_qp (qp, &qp_attr,
+				IBV_QP_STATE | IBV_QP_PKEY_INDEX |
+				IBV_QP_PORT  | IBV_QP_ACCESS_FLAGS);
+		check (ret == 0, "Failed to modify qp to INIT.");
     }
 
     /* 第二步：将QP状态转换为RTR（Ready To Receive） */
     {
-	struct ibv_qp_attr  qp_attr = {
-	    .qp_state           = IBV_QPS_RTR,
-	    .path_mtu           = IB_MTU,                  // 路径MTU大小
-	    .dest_qp_num        = target_qp_num,           // 目标QP号
-	    .rq_psn             = 0,                       // 接收队列包序号
-	    .max_dest_rd_atomic = 1,                       // 最大目标读原子操作
-	    .min_rnr_timer      = 12,                      // 最小RNR超时时间
-	    .ah_attr.is_global  = 0,                       // 不使用全局路由
-	    .ah_attr.dlid       = target_lid,              // 目标LID（本地ID）
-	    .ah_attr.sl         = IB_SL,                   // 服务等级
-	    .ah_attr.src_path_bits = 0,
-	    .ah_attr.port_num      = IB_PORT,
-	};
+		struct ibv_qp_attr  qp_attr = {
+			.qp_state           = IBV_QPS_RTR,
+			.path_mtu           = IB_MTU,                  // 路径MTU大小
+			.dest_qp_num        = target_qp_num,           // 目标QP号
+			.rq_psn             = 0,                       // 接收队列包序号
+			.max_dest_rd_atomic = 1,                       // 最大目标读原子操作
+			.min_rnr_timer      = 12,                      // 最小RNR超时时间
+			.ah_attr = {
+				.is_global      = 1,
+				.grh = {
+					.dgid		= *target_gid,  			// 目标 GID
+					.flow_label	= 0,
+					.sgid_index	= target_gid_index,
+					.hop_limit 	= 255, // TTL
+					.traffic_class = 0,
+				},
+				.dlid 			= 0,
+				.sl 			= IB_SL,
+				.src_path_bits	= 0,
+				.port_num		= IB_PORT,
+			}
+		};
 
-	ret = ibv_modify_qp(qp, &qp_attr,
-			    IBV_QP_STATE | IBV_QP_AV |
-			    IBV_QP_PATH_MTU | IBV_QP_DEST_QPN |
-			    IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC |
-			    IBV_QP_MIN_RNR_TIMER);
-	check (ret == 0, "Failed to change qp to rtr.");
+		ret = ibv_modify_qp(qp, &qp_attr,
+					IBV_QP_STATE | IBV_QP_AV |
+					IBV_QP_PATH_MTU | IBV_QP_DEST_QPN |
+					IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC |
+					IBV_QP_MIN_RNR_TIMER);
+		check (ret == 0, "Failed to change qp to rtr.");
     }
 
     /* 第三步：将QP状态转换为RTS（Ready To Send） */
     {
-	struct ibv_qp_attr  qp_attr = {
-	    .qp_state      = IBV_QPS_RTS,
-	    .timeout       = 14,                           // 连接超时时间
-	    .retry_cnt     = 7,                            // 重试次数
-	    .rnr_retry     = 7,                            // RNR（Receiver Not Ready）重试
-	    .sq_psn        = 0,                            // 发送队列包序号
-	    .max_rd_atomic = 1,                            // 最大读原子操作
-	};
+		struct ibv_qp_attr  qp_attr = {
+			.qp_state      = IBV_QPS_RTS,
+			.timeout       = 14,                           // 连接超时时间
+			.retry_cnt     = 7,                            // 重试次数
+			.rnr_retry     = 7,                            // RNR（Receiver Not Ready）重试
+			.sq_psn        = 0,                            // 发送队列包序号
+			.max_rd_atomic = 1,                            // 最大读原子操作
+		};
 
-	ret = ibv_modify_qp (qp, &qp_attr,
-			     IBV_QP_STATE | IBV_QP_TIMEOUT |
-			     IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY |
-			     IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC);
-	check (ret == 0, "Failed to modify qp to RTS.");
+		ret = ibv_modify_qp (qp, &qp_attr,
+					IBV_QP_STATE | IBV_QP_TIMEOUT |
+					IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY |
+					IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC);
+		check (ret == 0, "Failed to modify qp to RTS.");
     }
 
     return 0;

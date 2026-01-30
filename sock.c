@@ -164,6 +164,8 @@ int sock_set_qp_info(int sock_fd, struct QPInfo *qp_info)
     // 转换为网络字节序（大端）
     tmp_qp_info.lid       = htons(qp_info->lid);       // 16位端口标识符
     tmp_qp_info.qp_num    = htonl(qp_info->qp_num);    // 32位队列对号
+    tmp_qp_info.gid       = qp_info->gid;
+    tmp_qp_info.gid_index = qp_info->gid_index;
     
     // 将QP信息写入socket
     n = sock_write(sock_fd, (char *)&tmp_qp_info, sizeof(struct QPInfo));
@@ -188,6 +190,8 @@ int sock_get_qp_info(int sock_fd, struct QPInfo *qp_info)
     // 转换为主机字节序
     qp_info->lid       = ntohs(tmp_qp_info.lid);       // 16位端口标识符
     qp_info->qp_num    = ntohl(tmp_qp_info.qp_num);    // 32位队列对号
+    qp_info->gid       = tmp_qp_info.gid;
+    qp_info->gid_index = tmp_qp_info.gid_index;
     
     return 0;
 
